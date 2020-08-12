@@ -3,9 +3,27 @@ package tong
 import (
 	"encoding/json"
 	"errors"
-	"github.com/ming3000/tong/common"
 	"net/http"
+	"net/url"
 	"strconv"
+	"strings"
+
+	"github.com/ming3000/tong/common"
+)
+
+// Content-Type MIME of the most common data formats.
+const (
+	MIMEJSON              = "application/json"
+	MIMEHTML              = "text/html"
+	MIMEXML               = "application/xml"
+	MIMEXML2              = "text/xml"
+	MIMEPlain             = "text/plain"
+	MIMEPOSTForm          = "application/x-www-form-urlencoded"
+	MIMEMultipartPOSTForm = "multipart/form-data"
+	MIMEPROTOBUF          = "application/x-protobuf"
+	MIMEMSGPACK           = "application/x-msgpack"
+	MIMEMSGPACK2          = "application/msgpack"
+	MIMEYAML              = "application/x-yaml"
 )
 
 // Context is context for every goroutine
@@ -16,6 +34,7 @@ type Context struct {
 	handler      HandlerFunc
 	logger       *common.Logger
 	requestCache common.Cache
+	tong         *Tong
 }
 
 // $--- utils ---
@@ -126,6 +145,10 @@ func (c *Context) QueryString(key string, defaultValue string) string {
 	return value
 }
 
+func (c *Context) QueryParams() url.Values {
+	return c.request.URL.Query()
+}
+
 // $--- Post Reader ---
 func (c *Context) PostInt(key string, defaultValue int) int {
 	value := c.request.PostFormValue(key)
@@ -160,4 +183,25 @@ func (c *Context) PostString(key string, defaultValue string) string {
 	} // if>
 
 	return value
+}
+
+const defaultMemory = 32 << 20 // 32 MB
+
+// 获取表单入参
+func (c *Context) FormParams() (url.Values, error) {
+	if strings.HasPrefix(c.request.Header.Get(HeaderContentType), MIMEMultipartPOSTForm) {
+		if err := c.request.ParseMultipartForm(defaultMemory); err != nil {
+			return nil, err
+		}
+	} else {
+		if err := c.request.ParseForm(); err != nil {
+			return nil, err
+		}
+	}
+	return c.request.Form, nil
+}
+
+// 参数bind
+func (c *Context) Bind(i interface{}) error {
+	return c.tong.Binder.Bind(i, *c)
 }

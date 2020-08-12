@@ -3,13 +3,15 @@ package tong
 import (
 	"context"
 	"errors"
-	"github.com/ming3000/tong/common"
+	"fmt"
 	"net"
 	"net/http"
 	"reflect"
 	"runtime"
 	"sync"
 	"time"
+
+	"github.com/ming3000/tong/common"
 )
 
 // $--- handler type define ---
@@ -63,6 +65,7 @@ type Tong struct {
 	Logger             *common.Logger
 	NotFoundHandler    HandlerFunc
 	HTTPErrorHandler   ErrorHandlerFunc
+	Binder             Binder
 }
 
 // New creates an instance of Wu
@@ -77,6 +80,7 @@ func New() *Tong {
 		return tong.NewContext(nil, nil)
 	}
 	tong.Debug = true
+	tong.Binder = &DefaultBinder{}
 	tong.Logger = common.NewDefaultLogger(tong.Debug)
 	tong.NotFoundHandler = NotFoundHandler
 	tong.HTTPErrorHandler = DefaultHTTPErrorHandler
@@ -205,4 +209,30 @@ func (t *Tong) stopCronJobs() {
 	for i := range t.cronList {
 		t.cronList[i].Stop()
 	}
+}
+
+type HTTPError struct {
+	Code     int         `json:"-"`
+	Message  interface{} `json:"message"`
+	Internal error       `json:"-"` // Stores the error returned by an external dependency
+}
+
+func NewHTTPError(code int, message ...interface{}) *HTTPError {
+	he := &HTTPError{Code: code, Message: http.StatusText(code)}
+	if len(message) > 0 {
+		he.Message = message[0]
+	}
+	return he
+}
+
+func (he *HTTPError) Error() string {
+	if he.Internal == nil {
+		return fmt.Sprintf("code=%d, message=%v", he.Code, he.Message)
+	}
+	return fmt.Sprintf("code=%d, message=%v, internal=%v", he.Code, he.Message, he.Internal)
+}
+
+func (he *HTTPError) SetInternal(err error) *HTTPError {
+	he.Internal = err
+	return he
 }
